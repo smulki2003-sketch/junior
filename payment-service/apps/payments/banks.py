@@ -1,0 +1,18 @@
+SYRIAN_BANKS = [
+    "Commercial Bank of Syria",
+    "Real Estate Bank",
+    "Agricultural Cooperative Bank",
+    "Industrial Bank",
+    "Popular Credit Bank",
+    "Savings Bank",
+    "Syriac Bank",
+    "Banque Bemo Saudi Fransi",
+    "Bank of Syria and Overseas",
+    "Qatar National Bank Syria",
+    "Byblos Bank Syria",
+    "Al Baraka Bank Syria",
+    "International Bank for Trade and Finance",
+    "Fransabank Syria",
+    "Cham Bank",
+    "Bank Audi Syria",
+]

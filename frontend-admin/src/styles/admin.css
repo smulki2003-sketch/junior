@@ -1,0 +1,39 @@
+.table-row {
+  transition: background 0.15s ease;
+  border-bottom: 1px solid var(--table-border);
+}
+
+.table-row:hover {
+  background: var(--bg-hover);
+  cursor: pointer;
+}
+
+.action-btn {
+  transition: color 0.15s, background 0.15s;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.action-btn:hover {
+  background: var(--bg-elevated);
+}
+
+.sidebar-link.active {
+  background: rgba(59, 130, 246, 0.1);
+  border-left: 3px solid var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+[dir="rtl"] .sidebar-link.active {
+  border-left: 0;
+  border-right: 3px solid var(--accent-primary);
+}
+
+.badge-pending {
+  animation: pendingPulse 2.5s infinite;
+}
+
+.admin-shell {
+  min-height: 100vh;
+  background: var(--bg-base);
+}

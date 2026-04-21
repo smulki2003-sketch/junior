@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+[data-theme="dark"] {
+  --bg-base: #07090F;
+  --bg-surface: #0E1118;
+  --bg-elevated: #161B27;
+  --bg-hover: #1E2336;
+  --bg-glass: rgba(14, 17, 24, 0.8);
+  --accent-primary: #3B82F6;
+  --accent-success: #10B981;
+  --accent-warning: #F59E0B;
+  --accent-danger: #EF4444;
+  --accent-purple: #8B5CF6;
+  --accent-cyan: #06B6D4;
+  --text-primary: #E8ECF4;
+  --text-secondary: #7A8099;
+  --text-muted: #3D4259;
+  --text-label: #A0A8C0;
+  --table-header-bg: #0E1118;
+  --table-row-alt: #0B0E16;
+  --table-border: rgba(255, 255, 255, 0.05);
+  --border-subtle: rgba(59, 130, 246, 0.12);
+  --border-active: rgba(59, 130, 246, 0.4);
+  --status-active-bg: rgba(16, 185, 129, 0.12);
+  --status-pending-bg: rgba(245, 158, 11, 0.12);
+  --status-danger-bg: rgba(239, 68, 68, 0.12);
+  --status-neutral-bg: rgba(107, 114, 128, 0.15);
+  --font-display: "Space Grotesk", sans-serif;
+  --font-body: "IBM Plex Sans", sans-serif;
+}
+
+[data-theme="light"] {
+  --bg-base: #F0F2F8;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #E8EBF5;
+  --bg-hover: #DDE1F0;
+  --bg-glass: rgba(255, 255, 255, 0.8);
+  --accent-primary: #2563EB;
+  --accent-success: #059669;
+  --accent-warning: #D97706;
+  --accent-danger: #DC2626;
+  --accent-purple: #7C3AED;
+  --accent-cyan: #0891B2;
+  --text-primary: #0D1020;
+  --text-secondary: #4A5068;
+  --text-muted: #6B7280;
+  --text-label: #4B5563;
+  --table-header-bg: #F3F5FB;
+  --table-row-alt: #FAFBFF;
+  --table-border: rgba(15, 23, 42, 0.08);
+  --border-subtle: rgba(37, 99, 235, 0.2);
+  --border-active: rgba(37, 99, 235, 0.45);
+  --status-active-bg: rgba(16, 185, 129, 0.18);
+  --status-pending-bg: rgba(245, 158, 11, 0.18);
+  --status-danger-bg: rgba(239, 68, 68, 0.18);
+  --status-neutral-bg: rgba(107, 114, 128, 0.2);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    color 0.2s ease,
+    box-shadow 0.25s ease;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html[dir="rtl"] {
+  --font-display: "Cairo", sans-serif;
+  --font-body: "Cairo", sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+
+.dot-grid {
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.glass {
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+}
+
+.floating-input {
+  @apply w-full rounded-md border border-transparent bg-elevated px-3 pb-2 pt-5 text-sm text-[var(--text-primary)] outline-none;
+  border-color: var(--border-subtle);
+  transition: border-color 0.2s ease;
+}
+
+.floating-input:focus {
+  border-color: var(--border-active);
+}
+
+.floating-label {
+  @apply pointer-events-none absolute left-3 top-3 text-xs text-[var(--text-label)] transition-all;
+}
+
+.floating-input:focus + .floating-label,
+.floating-input:not(:placeholder-shown) + .floating-label {
+  @apply top-1 text-[10px];
+  color: var(--accent-primary);
+}
+
+.recharts-tooltip-wrapper {
+  transition: transform 0.1s ease !important;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #0E1118 25%, #161B27 50%, #0E1118 75%);
+  background-size: 600px 100%;
+  animation: shimmer 1.3s infinite linear;
+  border-radius: 4px;
+}
+
+[dir="rtl"] .floating-label {
+  left: auto;
+  right: 0.75rem;
+}
+
+[dir="rtl"] .font-mono,
+[dir="rtl"] .text-data {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
