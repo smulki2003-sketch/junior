@@ -2,7 +2,7 @@
 setlocal
 
 echo =========================================
-echo MASSA REAL DATA SEED (ADMIN + HOUSING)
+echo ADMIN REAL DATA SEED (ADMIN + HOUSING)
 echo =========================================
 
 echo [1/3] Preparing auth defaults and admin account...
