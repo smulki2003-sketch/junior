@@ -14,15 +14,15 @@ from .integrations import AdminServiceClient
 from .models import AIMetricsDaily, BookingMetricsDaily, KPIDaily, ModerationMetricsDaily, PaymentMetricsDaily
 
 
-def build_clients():
-    token = settings.INTERNAL_SERVICE_TOKEN
+def build_clients(service_token: str | None = None):
+    token = service_token or settings.INTERNAL_SERVICE_TOKEN
     return {
         "admin": AdminServiceClient(settings.ADMIN_SERVICE_BASE_URL, token),
     }
 
 
-def collect_source_snapshot(snapshot_date: date):
-    clients = build_clients()
+def collect_source_snapshot(snapshot_date: date, service_token: str | None = None):
+    clients = build_clients(service_token=service_token)
 
     active_users = 0
     new_registrations = 0
@@ -33,7 +33,7 @@ def collect_source_snapshot(snapshot_date: date):
     gross_volume = Decimal("0.00")
 
     with ThreadPoolExecutor(max_workers=5) as executor:
-        users_future = executor.submit(clients["admin"].users, 1000, False)
+        users_future = executor.submit(clients["admin"].users, 500, False)
         bookings_future = executor.submit(clients["admin"].bookings, 2000)
         payments_future = executor.submit(clients["admin"].payments, 2000)
         overview_future = executor.submit(clients["admin"].overview)
@@ -153,16 +153,16 @@ def _extract_day(raw_value) -> date | None:
         return None
 
 
-def compute_live_kpi_rows(start_date: date | None, end_date: date | None):
+def compute_live_kpi_rows(start_date: date | None, end_date: date | None, service_token: str | None = None):
     today = timezone.now().date()
     start = start_date or (today - timedelta(days=29))
     end = end_date or today
     if start > end:
         start, end = end, start
 
-    clients = build_clients()
+    clients = build_clients(service_token=service_token)
     with ThreadPoolExecutor(max_workers=4) as executor:
-        users_future = executor.submit(clients["admin"].users, 5000, False)
+        users_future = executor.submit(clients["admin"].users, 500, False)
         bookings_future = executor.submit(clients["admin"].bookings, 5000)
         overview_future = executor.submit(clients["admin"].overview)
         complaints_future = executor.submit(clients["admin"].complaints)
@@ -246,9 +246,9 @@ def summarize_kpi_rows(rows: list[dict]):
     }
 
 
-def aggregate_daily_metrics(snapshot_date: date | None = None, snapshot: dict | None = None):
+def aggregate_daily_metrics(snapshot_date: date | None = None, snapshot: dict | None = None, service_token: str | None = None):
     day = snapshot_date or timezone.now().date()
-    payload = snapshot or collect_source_snapshot(day)
+    payload = snapshot or collect_source_snapshot(day, service_token=service_token)
     with transaction.atomic():
         kpi, _ = KPIDaily.objects.update_or_create(
             date=day,

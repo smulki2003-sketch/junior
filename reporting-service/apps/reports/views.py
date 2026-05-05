@@ -28,14 +28,31 @@ def _validated_range(query_params):
     return serializer.validated_data["start_date"], serializer.validated_data["end_date"]
 
 
+def _request_bearer_token(request) -> str:
+    auth_header = str(request.headers.get("Authorization", "") or "")
+    if auth_header.startswith("Bearer "):
+        return auth_header.split(" ", 1)[1].strip()
+    return ""
+
+
 class ReportsKPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrServiceRole]
 
     def get(self, request):
+        requester_token = _request_bearer_token(request)
         if request.query_params.get("refresh", "").lower() in {"1", "true", "yes"}:
-            aggregate_daily_metrics()
+            aggregate_daily_metrics(service_token=requester_token or None)
         start_date, end_date = _validated_range(request.query_params)
-        data = compute_live_kpi_rows(start_date, end_date)
+
+        explicit_range_requested = bool(request.query_params.get("start_date") or request.query_params.get("end_date"))
+        if explicit_range_requested:
+            queryset = apply_date_range(KPIDaily.objects.all().order_by("date"), start_date, end_date)
+            if queryset.exists():
+                data = KPIDailySerializer(queryset, many=True).data
+                summary = summarize_kpi_rows(data)
+                return Response({"summary": summary, "results": data}, status=status.HTTP_200_OK)
+
+        data = compute_live_kpi_rows(start_date, end_date, service_token=requester_token or None)
         has_live_signal = any(
             int(item.get("active_users", 0)) > 0
             or int(item.get("new_registrations", 0)) > 0

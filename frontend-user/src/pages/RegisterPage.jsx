@@ -84,8 +84,8 @@ export default function RegisterPage() {
   const nextStep = () => setStep((s) => Math.min(3, s + 1));
   const prevStep = () => setStep((s) => Math.max(1, s - 1));
 
-  const submit = async (event) => {
-    event.preventDefault();
+  const submit = async () => {
+    if (step !== 3) return;
     if (form.password !== form.confirmPassword) {
       toast.error("Password confirmation does not match.");
       return;
@@ -153,7 +153,7 @@ export default function RegisterPage() {
         </section>
 
         <section className="flex items-center justify-center px-6 py-12">
-          <form onSubmit={submit} className="w-full max-w-md space-y-5 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-surface p-6">
+          <form className="w-full max-w-md space-y-5 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-surface p-6">
             <div className="h-1 w-full rounded bg-elevated">
               <motion.div className="h-full rounded bg-primary" animate={{ width: `${(step / 3) * 100}%` }} />
             </div>
@@ -269,7 +269,7 @@ export default function RegisterPage() {
                   Next -&gt;
                 </Button>
               ) : (
-                <Button type="submit" disabled={registerMutation.isPending}>
+                <Button type="button" onClick={submit} disabled={registerMutation.isPending}>
                   {registerMutation.isPending ? "Creating..." : "Create Account"}
                 </Button>
               )}
