@@ -11,9 +11,21 @@ class NotificationTemplateSerializer(serializers.ModelSerializer):
 
 
 class NotificationSerializer(serializers.ModelSerializer):
+    category = serializers.SerializerMethodField()
+
+    def get_category(self, obj):
+        event_key = str(getattr(obj, "event_key", "") or "").lower()
+        if event_key.startswith("booking."):
+            return "booking"
+        if event_key.startswith("payment."):
+            return "payment"
+        if event_key.startswith("ai.") or event_key.startswith("recommendation."):
+            return "recommendation"
+        return "system"
+
     class Meta:
         model = Notification
-        fields = ("id", "user_id", "event_key", "title", "body", "is_read", "created_at", "read_at")
+        fields = ("id", "user_id", "event_key", "title", "body", "category", "is_read", "created_at", "read_at")
         read_only_fields = ("id", "is_read", "created_at", "read_at")
 
 
@@ -56,4 +68,3 @@ class UserPreferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserNotificationPreference
         fields = ("id", "user_id", "event_key", "is_enabled", "created_at", "updated_at")
-

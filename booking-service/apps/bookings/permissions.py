@@ -8,7 +8,10 @@ class IsOwnerOrAdmin(BasePermission):
         user = request.user
         if not user or not getattr(user, "is_authenticated", False):
             return False
-        return int(obj.user_id) == int(user.id) or "admin" in getattr(user, "roles", [])
+        roles = set(getattr(user, "roles", []))
+        if "admin" in roles or "service" in roles:
+            return True
+        return int(obj.user_id) == int(user.id)
 
 
 class IsAdminOrServiceRole(BasePermission):
@@ -35,4 +38,3 @@ class IsUserOrAdminByPath(BasePermission):
         if "admin" in getattr(user, "roles", []):
             return True
         return int(path_user_id) == int(user.id)
-

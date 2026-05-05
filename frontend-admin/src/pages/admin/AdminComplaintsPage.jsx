@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import {
   addComplaintComment,
   getAdminComplaints,
@@ -21,6 +22,7 @@ export default function AdminComplaintsPage() {
   const listQuery = useQuery({
     queryKey: ["admin-complaints"],
     queryFn: () => getAdminComplaints(),
+    refetchInterval: 7000,
   });
 
   const complaints = useMemo(() => listQuery.data?.results || [], [listQuery.data]);
@@ -38,6 +40,7 @@ export default function AdminComplaintsPage() {
       listQuery.refetch();
       detailQuery.refetch();
       setInternalNote("");
+      toast.success("Complaint status updated.");
     },
   });
 
@@ -46,8 +49,15 @@ export default function AdminComplaintsPage() {
     onSuccess: () => {
       setReply("");
       detailQuery.refetch();
+      toast.success("Reply sent to user.");
     },
   });
+
+  useEffect(() => {
+    if (detailQuery.data?.status) {
+      setStatus(detailQuery.data.status);
+    }
+  }, [detailQuery.data?.status]);
 
   return (
     <AdminShell breadcrumb="Moderation / Complaints" complaintCount={complaints.length}>

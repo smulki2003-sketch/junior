@@ -18,9 +18,10 @@ export default function AdminReportsPage() {
   const [range, setRange] = useState("30d");
   const [reportType, setReportType] = useState("kpis");
   const [downloadUrl, setDownloadUrl] = useState("");
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const reportsQuery = useQuery({
-    queryKey: ["admin-reports-kpis", range],
-    queryFn: () => getReportKPIs({ range }),
+    queryKey: ["admin-reports-kpis", range, refreshVersion],
+    queryFn: () => getReportKPIs({ range, refresh: refreshVersion > 0 ? "true" : "false" }),
   });
 
   const summary = reportsQuery.data?.summary || {};
@@ -64,7 +65,7 @@ export default function AdminReportsPage() {
             </Button>
           ))}
         </div>
-        <Button variant="outline" onClick={() => reportsQuery.refetch()}>Refresh</Button>
+        <Button variant="outline" onClick={() => setRefreshVersion((value) => value + 1)}>Refresh</Button>
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <select

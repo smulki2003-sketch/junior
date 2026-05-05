@@ -1,5 +1,7 @@
 from datetime import date
+from datetime import timedelta
 
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import serializers
 
@@ -11,6 +13,18 @@ class DateRangeSerializer(serializers.Serializer):
     end_date = serializers.CharField(required=False)
 
     def validate(self, attrs):
+        range_value = str(self.initial_data.get("range", "") or "").strip().lower()
+        today = timezone.now().date()
+        if range_value:
+            if range_value == "today":
+                attrs["start_date"] = today.isoformat()
+                attrs["end_date"] = today.isoformat()
+            elif range_value.endswith("d") and range_value[:-1].isdigit():
+                days = int(range_value[:-1])
+                days = max(1, min(days, 365))
+                attrs["start_date"] = (today - timedelta(days=days - 1)).isoformat()
+                attrs["end_date"] = today.isoformat()
+
         start_date_raw = attrs.get("start_date")
         end_date_raw = attrs.get("end_date")
 

@@ -17,15 +17,28 @@ export default function AdminPaymentsPage() {
   });
 
   const source = query.data?.results || query.data || [];
+  const payoutEligible = useMemo(
+    () =>
+      source.filter(
+        (item) =>
+          ["success", "succeeded"].includes(String(item.status || "").toLowerCase()) &&
+          String(item.booking_status || "").toLowerCase() === "completed"
+      ),
+    [source]
+  );
   const filtered = useMemo(
-    () => source.filter((x) => statusFilter === "All" || String(x.status).toLowerCase() === statusFilter.toLowerCase()),
-    [source, statusFilter]
+    () => payoutEligible.filter((x) => statusFilter === "All" || String(x.status).toLowerCase() === statusFilter.toLowerCase()),
+    [payoutEligible, statusFilter]
   );
   const table = useTable(filtered, { initialPageSize: 20, initialSortKey: "id" });
 
   const totalRevenue = filtered.reduce((acc, item) => acc + Number(item.amount || 0), 0);
-  const successCount = filtered.filter((x) => x.status === "success" || x.status === "succeeded").length;
-  const failedPendingCount = filtered.filter((x) => ["failed", "pending"].includes(String(x.status).toLowerCase())).length;
+  const successCount = filtered.length;
+  const awaitingCompletionCount = source.filter(
+    (item) =>
+      ["success", "succeeded"].includes(String(item.status || "").toLowerCase()) &&
+      String(item.booking_status || "").toLowerCase() !== "completed"
+  ).length;
 
   const columns = [
     { key: "payment_id", title: "Payment ID", render: (row) => <span className="font-mono">{formatId("PAY", row.id)}</span> },
@@ -33,6 +46,7 @@ export default function AdminPaymentsPage() {
     { key: "user", title: "User", render: (row) => row.user_name || `User ${row.user_id}` },
     { key: "amount", title: "Amount", render: (row) => <span className="font-mono">{formatCurrency(row.amount)}</span> },
     { key: "method", title: "Method", render: (row) => `•••• ${row.last4 || "4242"}` },
+    { key: "booking_status", title: "Booking", render: (row) => <StatusBadge status={row.booking_status || "pending"} /> },
     { key: "status", title: "Status", render: (row) => <StatusBadge status={row.status || "pending"} /> },
     { key: "created_at", title: "Created At", render: (row) => <span className="font-mono text-xs">{formatDateTime(row.created_at)}</span> },
     {
@@ -52,16 +66,16 @@ export default function AdminPaymentsPage() {
     <AdminShell breadcrumb="Management / Payments">
       <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         <div className="rounded-[10px] border border-[var(--table-border)] bg-elevated p-4">
-          <p className="text-xs text-[var(--text-secondary)]">Total Simulated Revenue</p>
+          <p className="text-xs text-[var(--text-secondary)]">Recognized Revenue (Completed Bookings)</p>
           <p className="font-mono text-2xl">{formatCurrency(totalRevenue)}</p>
         </div>
         <div className="rounded-[10px] border border-[var(--table-border)] bg-elevated p-4">
-          <p className="text-xs text-[var(--text-secondary)]">Successful Payments</p>
+          <p className="text-xs text-[var(--text-secondary)]">Eligible Payments</p>
           <p className="font-mono text-2xl">{successCount}</p>
         </div>
         <div className="rounded-[10px] border border-[var(--table-border)] bg-elevated p-4">
-          <p className="text-xs text-[var(--text-secondary)]">Failed / Pending</p>
-          <p className={`font-mono text-2xl ${failedPendingCount > 0 ? "text-danger" : ""}`}>{failedPendingCount}</p>
+          <p className="text-xs text-[var(--text-secondary)]">Waiting Booking Completion</p>
+          <p className={`font-mono text-2xl ${awaitingCompletionCount > 0 ? "text-amber" : ""}`}>{awaitingCompletionCount}</p>
         </div>
       </div>
 
@@ -84,9 +98,9 @@ export default function AdminPaymentsPage() {
           sortKey={table.sortKey}
           sortDirection={table.sortDirection}
           pagination={{ page: table.page, pageSize: table.pageSize, total: table.total, onChange: table.setPage }}
+          emptyText="No payments are eligible yet. Mark bookings as completed first."
         />
       )}
     </AdminShell>
   );
 }
-

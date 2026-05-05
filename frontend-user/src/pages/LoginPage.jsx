@@ -96,7 +96,7 @@ export default function LoginPage() {
               <button type="button">Forgot password?</button>
             </div>
 
-            <Button className="w-full py-3" disabled={loginMutation.isPending}>
+            <Button type="submit" className="w-full py-3" disabled={loginMutation.isPending}>
               {loginMutation.isPending ? "Signing In..." : "Sign In"}
             </Button>
 
@@ -115,4 +115,3 @@ export default function LoginPage() {
     </main>
   );
 }
-

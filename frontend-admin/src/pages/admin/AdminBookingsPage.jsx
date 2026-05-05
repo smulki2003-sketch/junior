@@ -1,5 +1,6 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import { getAdminBookings, overrideBookingStatus } from "../../api/admin/bookings";
 import { AdminShell } from "../../components/layout/AdminShell";
@@ -14,6 +15,7 @@ import { formatCurrency, formatDate, formatId } from "../../utils/formatters";
 
 export default function AdminBookingsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("All");
   const [searchValue, setSearchValue] = useState("");
   const [overrideModal, setOverrideModal] = useState({ open: false, booking: null });
@@ -32,10 +34,29 @@ export default function AdminBookingsPage() {
 
   const overrideMutation = useMutation({
     mutationFn: ({ bookingId, payload }) => overrideBookingStatus(bookingId, payload),
-    onSuccess: () => {
+    onSuccess: (response, variables) => {
+      queryClient.setQueryData(["admin-bookings", searchValue], (current) => {
+        const sourceRows = current?.results || current || [];
+        if (!Array.isArray(sourceRows)) return current;
+        const nextRows = sourceRows.map((row) =>
+          row.id === variables.bookingId ? { ...row, status: response?.status || variables.payload.status } : row
+        );
+        return current?.results ? { ...current, results: nextRows } : nextRows;
+      });
       setOverrideModal({ open: false, booking: null });
       setOverridePayload({ status: "confirmed", reason: "" });
       query.refetch();
+      toast.success("Booking status updated.");
+    },
+    onError: (error) => {
+      const message =
+        error?.response?.data?.error?.message
+        || error?.response?.data?.error?.details
+        || "Unable to update booking status.";
+      toast.error(message);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-bookings"] });
     },
   });
   const overrideErrorText =
@@ -138,7 +159,7 @@ export default function AdminBookingsPage() {
               })
             }
           >
-            Confirm Override
+            {overrideMutation.isPending ? "Updating..." : "Confirm Override"}
           </Button>
         </div>
       </Modal>

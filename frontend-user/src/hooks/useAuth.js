@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { loginRequest, registerRequest } from "../api/auth";
+import { getMeRequest, loginRequest, registerRequest } from "../api/auth";
 import { useAuthStore } from "../store/authStore";
 
 export function useAuth() {
@@ -7,12 +7,18 @@ export function useAuth() {
 
   const loginMutation = useMutation({
     mutationFn: loginRequest,
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       auth.login({
         user: data.user,
         accessToken: data.tokens?.access_token || "",
         refreshToken: data.tokens?.refresh_token || "",
       });
+      try {
+        const me = await getMeRequest();
+        auth.hydrateUser(me);
+      } catch {
+        // no-op: token remains valid, fallback is existing user payload.
+      }
     },
   });
 
@@ -26,4 +32,3 @@ export function useAuth() {
     registerMutation,
   };
 }
-

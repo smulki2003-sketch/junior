@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { loginRequest } from "../api/auth";
@@ -40,7 +40,17 @@ export default function RegisterPage() {
   });
   const { registerMutation } = useAuth();
   const authStore = useAuthStore();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const initialAuthHandled = useRef(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (initialAuthHandled.current) return;
+    initialAuthHandled.current = true;
+    if (isAuthenticated) {
+      authStore.logout();
+    }
+  }, [isAuthenticated, authStore]);
 
   useEffect(() => {
     let mounted = true;

@@ -216,3 +216,20 @@ def notify_case_update(notification_client: NotificationServiceClient, targets: 
             {"complaint_id": complaint.id, "status": complaint.status},
         )
 
+
+def notify_case_comment(
+    notification_client: NotificationServiceClient,
+    targets: NotificationTarget,
+    complaint: Complaint,
+    comment_text: str,
+):
+    excerpt = str(comment_text or "").strip()
+    if len(excerpt) > 180:
+        excerpt = f"{excerpt[:177]}..."
+    notification_client.send_notification(
+        targets.complainant_user_id,
+        "moderation.complaint.reply",
+        {"complaint_id": complaint.id, "status": complaint.status, "comment": excerpt},
+        title=f"Reply on complaint #{complaint.id}",
+        body=excerpt or "Admin added a new reply on your complaint.",
+    )

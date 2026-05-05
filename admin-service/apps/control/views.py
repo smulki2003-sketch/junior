@@ -21,7 +21,7 @@ from .integrations import (
     RoommateServiceClient,
     UserServiceClient,
 )
-from .permissions import IsAdminRole
+from .permissions import IsAdminOrServiceRole, IsAdminRole
 from .models import AdminActionLog
 from .serializers import (
     AdminUserStatusUpdateSerializer,
@@ -54,8 +54,25 @@ def _admin_permissions():
     return [IsAuthenticated(), IsAdminRole()]
 
 
+def _as_bool(value, default: bool) -> bool:
+    if value is None:
+        return default
+    lowered = str(value).strip().lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _chunked(values: list[int], size: int = 100) -> list[list[int]]:
+    if not values:
+        return []
+    return [values[index : index + size] for index in range(0, len(values), size)]
+
+
 class AdminDashboardOverviewView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, IsAdminOrServiceRole]
 
     def get(self, request):
         clients = _clients(request)
@@ -142,17 +159,24 @@ class AdminDashboardOverviewView(APIView):
 
 
 class AdminUsersView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, IsAdminOrServiceRole]
 
     def get(self, request):
         user_ids = parse_id_csv(request.query_params.get("user_ids"))
         include_staff = str(request.query_params.get("include_staff", "")).strip().lower() in {"1", "true", "yes"}
+        include_profiles = _as_bool(request.query_params.get("include_profiles"), True)
+        include_booking_counts = _as_bool(request.query_params.get("include_booking_counts"), True)
+        limit_raw = request.query_params.get("limit")
+        limit = 200
+        if str(limit_raw or "").isdigit():
+            limit = max(1, min(int(limit_raw), 1000))
         clients = _clients(request)
         results = []
 
-        auth_code, auth_payload = clients["auth"].list_users(user_ids=user_ids, limit=200)
+        auth_code, auth_payload = clients["auth"].list_users(user_ids=user_ids, limit=limit)
         users = auth_payload.get("results", []) if auth_code == 200 and isinstance(auth_payload, dict) else []
 
+        filtered_auth_users = []
         for auth_user in users:
             user_id = auth_user.get("id")
             if not isinstance(user_id, int):
@@ -161,11 +185,48 @@ class AdminUsersView(APIView):
             role_list = [str(role).strip().lower() for role in roles] if isinstance(roles, list) else []
             if not include_staff and any(role in {"admin", "service"} for role in role_list):
                 continue
+            filtered_auth_users.append(auth_user)
 
-            code, payload = clients["user"].fetch_profile(user_id)
-            profile_payload = payload if code == 200 and isinstance(payload, dict) else {}
-            bookings_code, bookings_payload = clients["booking"].list_user_bookings(user_id)
-            bookings_count = len(bookings_payload) if bookings_code == 200 and isinstance(bookings_payload, list) else 0
+        profile_map: dict[int, dict] = {}
+        if include_profiles and filtered_auth_users:
+            def fetch_profile(user_id: int):
+                code, payload = clients["user"].fetch_profile(user_id)
+                if code == 200 and isinstance(payload, dict):
+                    return user_id, payload
+                return user_id, {}
+
+            with ThreadPoolExecutor(max_workers=min(16, len(filtered_auth_users))) as executor:
+                profile_rows = list(executor.map(lambda row: fetch_profile(int(row["id"])), filtered_auth_users))
+            profile_map = dict(profile_rows)
+
+        booking_counts: dict[int, int] = defaultdict(int)
+        if include_booking_counts and filtered_auth_users:
+            list_code, list_payload = clients["booking"].list_bookings(limit=3000)
+            all_bookings = list_payload if list_code == 200 and isinstance(list_payload, list) else []
+            if all_bookings:
+                tracked_ids = {int(row["id"]) for row in filtered_auth_users if isinstance(row.get("id"), int)}
+                for booking in all_bookings:
+                    row_user_id = booking.get("user_id")
+                    if isinstance(row_user_id, int) and row_user_id in tracked_ids:
+                        booking_counts[row_user_id] += 1
+            else:
+                def fetch_booking_count(user_id: int):
+                    code, payload = clients["booking"].list_user_bookings(user_id)
+                    if code == 200 and isinstance(payload, list):
+                        return user_id, len(payload)
+                    return user_id, 0
+
+                with ThreadPoolExecutor(max_workers=min(16, len(filtered_auth_users))) as executor:
+                    count_rows = list(executor.map(lambda row: fetch_booking_count(int(row["id"])), filtered_auth_users))
+                booking_counts = defaultdict(int, dict(count_rows))
+
+        for auth_user in filtered_auth_users:
+            user_id = auth_user.get("id")
+            if not isinstance(user_id, int):
+                continue
+            roles = auth_user.get("roles", [])
+            profile_payload = profile_map.get(user_id, {}) if include_profiles else {}
+            bookings_count = int(booking_counts.get(user_id, 0)) if include_booking_counts else 0
             primary_role = roles[0] if isinstance(roles, list) and roles else "student"
             results.append(
                 {
@@ -223,7 +284,7 @@ class AdminUserStatusUpdateView(APIView):
 
 
 class AdminHousingPendingView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, IsAdminOrServiceRole]
 
     def get(self, request):
         code, payload = _clients(request)["housing"].list_pending()
@@ -262,11 +323,12 @@ class AdminHousingApprovalUpdateView(APIView):
 
 
 class AdminBookingsView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, IsAdminOrServiceRole]
 
     def get(self, request):
         booking_ids = parse_id_csv(request.query_params.get("booking_ids"))
         user_id = request.query_params.get("user_id")
+        include_user_details = _as_bool(request.query_params.get("include_user_details"), True)
         clients = _clients(request)
 
         booking_rows = []
@@ -282,6 +344,29 @@ class AdminBookingsView(APIView):
         if not booking_rows:
             return Response({"results": [], "count": 0}, status=status.HTTP_200_OK)
 
+        auth_user_map: dict[int, dict] = {}
+        profile_map: dict[int, dict] = {}
+        if include_user_details:
+            user_ids = sorted({booking.get("user_id") for booking in booking_rows if isinstance(booking.get("user_id"), int)})
+            for chunk in _chunked(user_ids, 120):
+                auth_code, auth_payload = clients["auth"].list_users(user_ids=chunk, limit=max(120, len(chunk)))
+                auth_rows = auth_payload.get("results", []) if auth_code == 200 and isinstance(auth_payload, dict) else []
+                for row in auth_rows:
+                    row_id = row.get("id")
+                    if isinstance(row_id, int):
+                        auth_user_map[row_id] = row
+
+            if user_ids:
+                def fetch_profile(user_id: int):
+                    code, payload = clients["user"].fetch_profile(user_id)
+                    if code == 200 and isinstance(payload, dict):
+                        return user_id, payload
+                    return user_id, {}
+
+                with ThreadPoolExecutor(max_workers=min(16, len(user_ids))) as executor:
+                    profile_rows = list(executor.map(fetch_profile, user_ids))
+                profile_map = dict(profile_rows)
+
         payment_code, payment_payload = clients["payment"].list_payments(limit=500)
         payment_rows = payment_payload if payment_code == 200 and isinstance(payment_payload, list) else []
         payment_by_booking = {}
@@ -295,6 +380,13 @@ class AdminBookingsView(APIView):
         enriched = []
         for booking in booking_rows:
             payment = payment_by_booking.get(booking.get("id"), {})
+            row_user_id = booking.get("user_id")
+            profile = profile_map.get(row_user_id, {}) if isinstance(row_user_id, int) else {}
+            auth_user = auth_user_map.get(row_user_id, {}) if isinstance(row_user_id, int) else {}
+            first_name = str(profile.get("first_name", "")).strip()
+            last_name = str(profile.get("last_name", "")).strip()
+            full_name = f"{first_name} {last_name}".strip()
+            user_name = full_name or auth_user.get("email", "")
             enriched.append(
                 {
                     **booking,
@@ -302,6 +394,8 @@ class AdminBookingsView(APIView):
                     "payment_id": payment.get("id"),
                     "payer_bank_name": payment.get("payer_bank_name", ""),
                     "payer_account_number": payment.get("payer_account_number", ""),
+                    "user_name": (user_name or f"User {row_user_id}") if include_user_details else "",
+                    "user_email": (auth_user.get("email", "") or profile.get("email", "")) if include_user_details else "",
                 }
             )
         return Response({"results": enriched, "count": len(enriched)}, status=status.HTTP_200_OK)
@@ -366,14 +460,71 @@ class AdminBookingStatusUpdateView(APIView):
 
 
 class AdminPaymentsView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, IsAdminOrServiceRole]
 
     def get(self, request):
         payment_ids = parse_id_csv(request.query_params.get("payment_ids"))
+        include_user_details = _as_bool(request.query_params.get("include_user_details"), True)
         clients = _clients(request)
         code, payload = clients["payment"].list_payments(payment_ids=payment_ids or None, limit=300)
         if code == 200 and isinstance(payload, list):
-            return Response({"results": payload, "count": len(payload)}, status=status.HTTP_200_OK)
+            payments = payload
+            if not include_user_details:
+                return Response({"results": payments, "count": len(payments)}, status=status.HTTP_200_OK)
+            booking_ids = sorted({item.get("booking_id") for item in payments if isinstance(item.get("booking_id"), int)})
+            user_ids = sorted({item.get("user_id") for item in payments if isinstance(item.get("user_id"), int)})
+
+            booking_map: dict[int, dict] = {}
+            if booking_ids:
+                booking_code, booking_payload = clients["booking"].list_bookings(booking_ids=booking_ids, limit=max(300, len(booking_ids) + 20))
+                booking_rows = booking_payload if booking_code == 200 and isinstance(booking_payload, list) else []
+                booking_map = {
+                    row["id"]: row for row in booking_rows if isinstance(row, dict) and isinstance(row.get("id"), int)
+                }
+
+            auth_user_map: dict[int, dict] = {}
+            for chunk in _chunked(user_ids, 120):
+                auth_code, auth_payload = clients["auth"].list_users(user_ids=chunk, limit=max(120, len(chunk)))
+                auth_rows = auth_payload.get("results", []) if auth_code == 200 and isinstance(auth_payload, dict) else []
+                for row in auth_rows:
+                    row_id = row.get("id")
+                    if isinstance(row_id, int):
+                        auth_user_map[row_id] = row
+
+            profile_map: dict[int, dict] = {}
+            if user_ids:
+                def fetch_profile(user_id: int):
+                    user_code, user_payload = clients["user"].fetch_profile(user_id)
+                    if user_code == 200 and isinstance(user_payload, dict):
+                        return user_id, user_payload
+                    return user_id, {}
+
+                with ThreadPoolExecutor(max_workers=min(16, len(user_ids))) as executor:
+                    profile_rows = list(executor.map(fetch_profile, user_ids))
+                profile_map = dict(profile_rows)
+
+            enriched = []
+            for payment in payments:
+                row_user_id = payment.get("user_id")
+                row_booking_id = payment.get("booking_id")
+                booking = booking_map.get(row_booking_id, {}) if isinstance(row_booking_id, int) else {}
+                profile = profile_map.get(row_user_id, {}) if isinstance(row_user_id, int) else {}
+                auth_user = auth_user_map.get(row_user_id, {}) if isinstance(row_user_id, int) else {}
+                first_name = str(profile.get("first_name", "")).strip()
+                last_name = str(profile.get("last_name", "")).strip()
+                full_name = f"{first_name} {last_name}".strip()
+                user_name = full_name or auth_user.get("email", "")
+                enriched.append(
+                    {
+                        **payment,
+                        "booking_status": booking.get("status", ""),
+                        "unit_id": booking.get("unit_id"),
+                        "user_name": user_name or f"User {row_user_id}",
+                        "user_email": auth_user.get("email", "") or profile.get("email", ""),
+                    }
+                )
+
+            return Response({"results": enriched, "count": len(enriched)}, status=status.HTTP_200_OK)
         return Response({"results": [], "count": 0}, status=status.HTTP_200_OK)
 
 
@@ -387,6 +538,11 @@ class AdminNotificationsBroadcastView(APIView):
         user_ids = payload.get("target_user_ids", [])
         event_key = payload.get("event_key", "admin.broadcast")
         notification_client = _clients(request)["notification"]
+        if not user_ids:
+            return Response(
+                {"error": {"code": "no_recipients", "message": "No recipients were selected for this broadcast."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         deliveries = []
         for user_id in user_ids:
@@ -394,6 +550,8 @@ class AdminNotificationsBroadcastView(APIView):
                 user_id,
                 event_key,
                 {"title": payload["title"], "body": payload["body"]},
+                title=payload["title"],
+                body=payload["body"],
             )
             deliveries.append({"user_id": user_id, "status_code": code, "payload": response_payload})
 
@@ -417,7 +575,7 @@ class AdminNotificationsBroadcastView(APIView):
 
 
 class AdminComplaintsView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, IsAdminOrServiceRole]
 
     def get(self, request):
         code, payload = _clients(request)["moderation"].list_complaints()

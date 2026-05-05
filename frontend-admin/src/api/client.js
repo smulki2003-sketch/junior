@@ -3,7 +3,7 @@ import toast from "react-hot-toast";
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_ADMIN_API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000,
 });
 
 function extractApiErrorMessage(err) {
@@ -55,6 +55,11 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (res) => res,
   (err) => {
+    if (err.code === "ECONNABORTED") {
+      toast.error("This request is taking longer than expected. Please wait a moment and retry.");
+      return Promise.reject(err);
+    }
+
     const status = err.response?.status;
     const message = extractApiErrorMessage(err);
 

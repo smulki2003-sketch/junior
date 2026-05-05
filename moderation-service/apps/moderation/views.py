@@ -29,6 +29,7 @@ from .services import (
     NotificationTarget,
     apply_moderation_action,
     create_complaint_with_case,
+    notify_case_comment,
     notify_case_update,
     notify_complaint_created,
     resolve_target_user_id,
@@ -44,6 +45,13 @@ def _service_clients():
         "booking": BookingServiceClient(settings.BOOKING_SERVICE_BASE_URL, service_token),
         "admin": AdminServiceClient(settings.ADMIN_SERVICE_BASE_URL, service_token),
     }
+
+
+def _request_bearer_token(request) -> str:
+    auth_header = str(request.headers.get("Authorization", "") or "")
+    if auth_header.startswith("Bearer "):
+        return auth_header.split(" ", 1)[1].strip()
+    return ""
 
 
 def _complaint_queryset():
@@ -79,7 +87,9 @@ class ComplaintListCreateView(APIView):
 
         clients = _service_clients()
         if data["target_type"] == Complaint.TARGET_BOOKING:
-            booking_code, booking_payload = clients["booking"].fetch_booking(data["target_id"])
+            requester_token = _request_bearer_token(request)
+            booking_client = BookingServiceClient(settings.BOOKING_SERVICE_BASE_URL, requester_token or settings.INTERNAL_SERVICE_TOKEN)
+            booking_code, booking_payload = booking_client.fetch_booking(data["target_id"])
             if booking_code != 200 or not isinstance(booking_payload, dict):
                 return Response(
                     {"error": {"code": "booking_not_found", "message": "Booking not found for complaint."}},
@@ -228,7 +238,7 @@ class CaseCommentCreateView(APIView):
     permission_classes = [IsAuthenticated, IsAdminRole]
 
     def post(self, request, case_id: int):
-        case = ModerationCase.objects.filter(id=case_id).first()
+        case = ModerationCase.objects.select_related("complaint").filter(id=case_id).first()
         if case is None:
             return Response(
                 {"error": {"code": "case_not_found", "message": "Moderation case not found."}},
@@ -240,5 +250,14 @@ class CaseCommentCreateView(APIView):
             case=case,
             admin_user_id=request.user.id,
             comment=serializer.validated_data["comment"],
+        )
+        complaint = case.complaint
+        clients = _service_clients()
+        target_user_id = resolve_target_user_id(complaint, clients["housing"], clients["booking"])
+        notify_case_comment(
+            clients["notification"],
+            NotificationTarget(complainant_user_id=complaint.reporter_user_id, target_user_id=target_user_id),
+            complaint,
+            comment.comment,
         )
         return Response(CaseCommentSerializer(comment).data, status=status.HTTP_201_CREATED)

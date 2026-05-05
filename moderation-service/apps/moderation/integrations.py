@@ -32,11 +32,11 @@ class NotificationServiceClient:
         self.base_url = base_url.rstrip("/")
         self.service_token = service_token
 
-    def send_notification(self, user_id: int, event_key: str, context: dict):
+    def send_notification(self, user_id: int, event_key: str, context: dict, title: str = "", body: str = ""):
         return _safe_json_request(
             f"{self.base_url}/notifications/send",
             method="POST",
-            payload={"user_id": user_id, "event_key": event_key, "context": context},
+            payload={"user_id": user_id, "event_key": event_key, "context": context, "title": title, "body": body},
             token=self.service_token,
         )
 
@@ -121,4 +121,3 @@ class EnforcementGateway:
             code, payload = self.booking_client.cancel_booking(target_id)
             return {"ok": code in {200, 202}, "status_code": code, "payload": payload}
         return {"ok": False, "error": "unsupported_action_target_pair"}
-

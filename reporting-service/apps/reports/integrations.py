@@ -38,15 +38,15 @@ class AdminServiceClient:
     def users(self, limit: int = 500, include_staff: bool = False):
         include_staff_value = "true" if include_staff else "false"
         return _safe_json_request(
-            f"{self.base_url}/admin/users?limit={limit}&include_staff={include_staff_value}",
+            f"{self.base_url}/admin/users?limit={limit}&include_staff={include_staff_value}&include_profiles=false&include_booking_counts=false",
             token=self.service_token,
         )
 
     def bookings(self, limit: int = 500):
-        return _safe_json_request(f"{self.base_url}/admin/bookings?limit={limit}", token=self.service_token)
+        return _safe_json_request(f"{self.base_url}/admin/bookings?limit={limit}&include_user_details=false", token=self.service_token)
 
     def payments(self, limit: int = 500):
-        return _safe_json_request(f"{self.base_url}/admin/payments?limit={limit}", token=self.service_token)
+        return _safe_json_request(f"{self.base_url}/admin/payments?limit={limit}&include_user_details=false", token=self.service_token)
 
     def complaints(self):
         return _safe_json_request(f"{self.base_url}/admin/complaints", token=self.service_token)

@@ -48,7 +48,7 @@ export default function App() {
 
   useEffect(() => {
     let isActive = true;
-    if (!isAuthenticated || user?.id) return () => {};
+    if (!isAuthenticated) return () => {};
 
     getMeRequest()
       .then((me) => {
@@ -63,7 +63,7 @@ export default function App() {
     return () => {
       isActive = false;
     };
-  }, [isAuthenticated, user?.id, hydrateUser, logout]);
+  }, [isAuthenticated, hydrateUser, logout]);
 
   return (
     <motion.div

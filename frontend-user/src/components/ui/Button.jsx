@@ -11,6 +11,7 @@ export function Button({ className, variant = "primary", children, ...props }) {
 
   return (
     <button
+      type={props.type || "button"}
       className={cn(
         "inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition",
         variants[variant],
@@ -22,4 +23,3 @@ export function Button({ className, variant = "primary", children, ...props }) {
     </button>
   );
 }
-

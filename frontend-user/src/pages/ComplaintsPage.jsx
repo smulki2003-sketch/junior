@@ -1,7 +1,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import { createComplaint, getComplaintDetail, listMyComplaints } from "../api/complaints";
 import { getUserBookings } from "../api/bookings";
+import { getHousingUnit } from "../api/housing";
 import { PageWrapper } from "../components/layout/PageWrapper";
 import { Button } from "../components/ui/Button";
 import { ErrorState } from "../components/ui/ErrorState";
@@ -10,28 +12,50 @@ import { useAuthStore } from "../store/authStore";
 
 export default function ComplaintsPage() {
   const user = useAuthStore((state) => state.user);
+  const userId = user?.id ?? user?.user_id ?? null;
   const [bookingId, setBookingId] = useState("");
   const [reason, setReason] = useState("");
   const [selectedComplaintId, setSelectedComplaintId] = useState(null);
 
   const bookingsQuery = useQuery({
-    queryKey: ["complaint-bookings", user?.id],
-    enabled: Boolean(user?.id),
-    queryFn: () => getUserBookings(user.id),
+    queryKey: ["complaint-bookings", userId],
+    enabled: Boolean(userId),
+    queryFn: () => getUserBookings(userId),
   });
   const complaintsQuery = useQuery({
-    queryKey: ["my-complaints", user?.id],
-    enabled: Boolean(user?.id),
+    queryKey: ["my-complaints", userId],
+    enabled: Boolean(userId),
     queryFn: listMyComplaints,
+    refetchInterval: 7000,
   });
 
   const eligibleBookings = useMemo(() => {
     const rows = Array.isArray(bookingsQuery.data) ? bookingsQuery.data : [];
     return rows.filter((item) => ["confirmed", "completed"].includes(String(item.status).toLowerCase()));
   }, [bookingsQuery.data]);
+  const unitIdsKey = useMemo(
+    () => eligibleBookings.map((item) => item.unit_id).filter((id) => Number.isInteger(id)).sort((a, b) => a - b).join(","),
+    [eligibleBookings]
+  );
+  const unitDetailsQuery = useQuery({
+    queryKey: ["complaint-unit-details", unitIdsKey],
+    enabled: Boolean(unitIdsKey),
+    queryFn: async () => {
+      const unitIds = unitIdsKey.split(",").filter(Boolean).map((item) => Number(item));
+      const settled = await Promise.allSettled(unitIds.map((unitId) => getHousingUnit(unitId)));
+      const nextMap = {};
+      settled.forEach((entry, index) => {
+        if (entry.status === "fulfilled") {
+          nextMap[unitIds[index]] = entry.value;
+        }
+      });
+      return nextMap;
+    },
+  });
+  const unitById = unitDetailsQuery.data || {};
 
   useEffect(() => {
-    if (eligibleBookings.length === 1 && !bookingId) {
+    if (eligibleBookings.length > 0 && !bookingId) {
       setBookingId(String(eligibleBookings[0].id));
     }
   }, [eligibleBookings, bookingId]);
@@ -47,8 +71,32 @@ export default function ComplaintsPage() {
       setReason("");
       setSelectedComplaintId(row?.id || null);
       complaintsQuery.refetch();
+      toast.success("Complaint submitted. Please check notifications for updates.");
+    },
+    onError: (error) => {
+      const message =
+        error?.response?.data?.error?.message
+        || error?.response?.data?.error?.details?.upstream_response?.error?.message
+        || "Unable to submit complaint. Please try again.";
+      toast.error(message);
     },
   });
+
+  function handleSubmitComplaint() {
+    if (!userId) {
+      toast.error("Your session is not ready yet. Please reopen this page.");
+      return;
+    }
+    if (!bookingId) {
+      toast.error("Please select a booking first.");
+      return;
+    }
+    if (reason.trim().length < 10) {
+      toast.error("Complaint message must be at least 10 characters.");
+      return;
+    }
+    createMutation.mutate();
+  }
 
   const detailQuery = useQuery({
     queryKey: ["complaint-detail", selectedComplaintId],
@@ -57,6 +105,12 @@ export default function ComplaintsPage() {
   });
 
   const complaints = Array.isArray(complaintsQuery.data) ? complaintsQuery.data : [];
+
+  useEffect(() => {
+    if (!selectedComplaintId && complaints.length > 0) {
+      setSelectedComplaintId(complaints[0].id);
+    }
+  }, [complaints, selectedComplaintId]);
 
   return (
     <PageWrapper className="space-y-6">
@@ -84,12 +138,14 @@ export default function ComplaintsPage() {
                 <option value="">Select booking</option>
                 {eligibleBookings.map((item) => (
                   <option key={item.id} value={item.id}>
-                    Booking #{item.id} - Unit {item.unit_id}
+                    Booking #{item.id} - {unitById[item.unit_id]?.title || `Unit ${item.unit_id}`}
                   </option>
                 ))}
               </select>
             ) : (
-              <p className="text-sm">Booking #{eligibleBookings[0].id} - Unit {eligibleBookings[0].unit_id}</p>
+              <p className="text-sm">
+                Booking #{eligibleBookings[0].id} - {unitById[eligibleBookings[0].unit_id]?.title || `Unit ${eligibleBookings[0].unit_id}`}
+              </p>
             )}
             <textarea
               className="h-32 w-full rounded-md border border-[var(--border-subtle)] bg-elevated px-3 py-2"
@@ -98,11 +154,12 @@ export default function ComplaintsPage() {
               onChange={(e) => setReason(e.target.value)}
             />
             <Button
-              onClick={() => createMutation.mutate()}
-              disabled={!bookingId || reason.trim().length < 10 || createMutation.isPending}
+              onClick={handleSubmitComplaint}
+              disabled={createMutation.isPending}
             >
               {createMutation.isPending ? "Submitting..." : "Submit Complaint"}
             </Button>
+            {!bookingId ? <p className="text-xs text-amber">Please select a booking first.</p> : null}
           </>
         )}
       </section>

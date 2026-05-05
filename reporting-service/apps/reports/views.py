@@ -19,6 +19,7 @@ from .serializers import (
     apply_date_range,
 )
 from .services import aggregate_daily_metrics, csv_from_rows
+from .services import compute_live_kpi_rows, summarize_kpi_rows
 
 
 def _validated_range(query_params):
@@ -34,15 +35,17 @@ class ReportsKPIView(APIView):
         if request.query_params.get("refresh", "").lower() in {"1", "true", "yes"}:
             aggregate_daily_metrics()
         start_date, end_date = _validated_range(request.query_params)
-        queryset = apply_date_range(KPIDaily.objects.all().order_by("date"), start_date, end_date)
-        data = KPIDailySerializer(queryset, many=True).data
-        summary = {
-            "days": len(data),
-            "active_users": sum(item["active_users"] for item in data),
-            "new_registrations": sum(item["new_registrations"] for item in data),
-            "total_bookings": sum(item["total_bookings"] for item in data),
-            "gross_volume": str(sum(float(item["gross_volume"]) for item in data)),
-        }
+        data = compute_live_kpi_rows(start_date, end_date)
+        has_live_signal = any(
+            int(item.get("active_users", 0)) > 0
+            or int(item.get("new_registrations", 0)) > 0
+            or int(item.get("total_bookings", 0)) > 0
+            for item in data
+        )
+        if not has_live_signal:
+            queryset = apply_date_range(KPIDaily.objects.all().order_by("date"), start_date, end_date)
+            data = KPIDailySerializer(queryset, many=True).data
+        summary = summarize_kpi_rows(data)
         return Response({"summary": summary, "results": data}, status=status.HTTP_200_OK)
 
 

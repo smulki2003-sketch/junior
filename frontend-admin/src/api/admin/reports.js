@@ -6,7 +6,7 @@ export async function getDashboardOverview() {
 }
 
 export async function getReportKPIs(params) {
-  const { data } = await client.get("/api/v1/reports/kpis", { params: { ...(params || {}), refresh: "true" } });
+  const { data } = await client.get("/api/v1/reports/kpis", { params });
   return data;
 }
 

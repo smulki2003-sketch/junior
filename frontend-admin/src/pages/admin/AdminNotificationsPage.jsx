@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import { sendBroadcast } from "../../api/admin/notifications";
 import { getAdminUsers } from "../../api/admin/users";
 import { AdminShell } from "../../components/layout/AdminShell";
@@ -33,7 +34,7 @@ export default function AdminNotificationsPage() {
 
   const usersQuery = useQuery({
     queryKey: ["admin-users-for-broadcast"],
-    queryFn: () => getAdminUsers({}),
+    queryFn: () => getAdminUsers({ include_profiles: false, include_booking_counts: false }),
   });
 
   const users = Array.isArray(usersQuery.data?.results) ? usersQuery.data.results : [];
@@ -78,10 +79,22 @@ export default function AdminNotificationsPage() {
         audience: "all_users",
         type: "info",
       });
+      toast.success(`Broadcast sent to ${Number(response?.recipient_count || targetUserIds.length)} users.`);
+    },
+    onError: (error) => {
+      const message =
+        error?.response?.data?.error?.message
+        || error?.response?.data?.error?.details?.upstream_response?.error?.message
+        || "Unable to send broadcast.";
+      toast.error(message);
     },
   });
 
   function sendNow() {
+    if (!targetUserIds.length) {
+      toast.error("No recipients found for selected audience.");
+      return;
+    }
     broadcastMutation.mutate({
       title: payload.title,
       body: payload.body,
@@ -162,7 +175,7 @@ export default function AdminNotificationsPage() {
           <Button
             className="w-full"
             onClick={() => setConfirmOpen(true)}
-            disabled={!payload.title.trim() || !payload.body.trim() || usersQuery.isLoading}
+            disabled={payload.title.trim().length < 3 || payload.body.trim().length < 3 || usersQuery.isLoading || targetUserIds.length === 0}
           >
             Send Broadcast
           </Button>
